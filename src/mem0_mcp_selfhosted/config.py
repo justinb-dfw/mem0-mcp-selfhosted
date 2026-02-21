@@ -85,7 +85,18 @@ def build_config() -> tuple[dict[str, Any], list[ProviderInfo], dict[str, Any] |
         vector_config["on_disk"] = True
     qdrant_timeout = os.environ.get("MEM0_QDRANT_TIMEOUT")
     if qdrant_timeout:
-        vector_config["timeout"] = int(qdrant_timeout)
+        # QdrantConfig's Pydantic model does not accept "timeout" directly.
+        # Create a pre-configured QdrantClient with the timeout and pass it
+        # via the "client" field, which mem0ai uses as-is.
+        from qdrant_client import QdrantClient
+
+        client_kwargs: dict[str, Any] = {
+            "url": qdrant_url,
+            "timeout": int(qdrant_timeout),
+        }
+        if qdrant_api_key:
+            client_kwargs["api_key"] = qdrant_api_key
+        vector_config["client"] = QdrantClient(**client_kwargs)
 
     # --- History ---
     history_db_path = os.environ.get("MEM0_HISTORY_DB_PATH")

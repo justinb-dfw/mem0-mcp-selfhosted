@@ -382,16 +382,23 @@ class TestBuildConfig:
 
     # --- Qdrant timeout (11.x) ---
 
-    def test_qdrant_timeout_from_env(self):
-        """MEM0_QDRANT_TIMEOUT sets integer timeout in vector_config."""
+    def test_qdrant_timeout_creates_preconfigured_client(self):
+        """MEM0_QDRANT_TIMEOUT creates a pre-configured QdrantClient via 'client' field."""
         env = {"MEM0_QDRANT_TIMEOUT": "30"}
         config_dict, *_ = self._build_with_env(env)
-        assert config_dict["vector_store"]["config"]["timeout"] == 30
+        vc = config_dict["vector_store"]["config"]
+        # "timeout" must NOT be a direct key (QdrantConfig rejects it)
+        assert "timeout" not in vc
+        # A pre-configured QdrantClient should be in the "client" field
+        from qdrant_client import QdrantClient
+        assert isinstance(vc["client"], QdrantClient)
 
     def test_qdrant_timeout_absent_when_not_set(self):
-        """No timeout key in vector_config when MEM0_QDRANT_TIMEOUT is not set."""
+        """No client or timeout key in vector_config when MEM0_QDRANT_TIMEOUT is not set."""
         config_dict, *_ = self._build_with_env({})
-        assert "timeout" not in config_dict["vector_store"]["config"]
+        vc = config_dict["vector_store"]["config"]
+        assert "timeout" not in vc
+        assert "client" not in vc
 
     def test_contradiction_llm_url_not_affected_by_embed_url(self):
         """Changing MEM0_EMBED_URL does NOT affect contradiction LLM URL."""
