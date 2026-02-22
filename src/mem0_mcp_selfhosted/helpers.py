@@ -94,6 +94,43 @@ def patch_graph_sanitizer() -> None:
     logger.info("Patched mem0ai relationship sanitizer for Neo4j compliance")
 
 
+def patch_gemini_parse_response() -> None:
+    """Monkey-patch mem0ai's GeminiLLM to guard against null content responses.
+
+    The upstream ``GeminiLLM._parse_response`` accesses
+    ``response.candidates[0].content.parts`` without checking that ``.content``
+    is not ``None``.  When the Gemini API returns a candidate with null content
+    (safety block, empty response, transient error), this raises
+    ``AttributeError: 'NoneType' object has no attribute 'parts'``.
+
+    Must be called AFTER mem0 modules are imported but BEFORE Memory.from_config().
+    """
+    try:
+        from mem0.llms.gemini import GeminiLLM
+    except ImportError:
+        logger.debug("mem0.llms.gemini not available — skipping Gemini null guard patch")
+        return
+
+    original = getattr(GeminiLLM, "_parse_response", None)
+    if original is None:
+        logger.debug("GeminiLLM._parse_response not found — skipping patch")
+        return
+
+    def _safe_parse_response(self, response):  # noqa: ANN001
+        """Guarded _parse_response that handles null content gracefully."""
+        if (
+            response.candidates
+            and response.candidates[0].content is not None
+            and response.candidates[0].content.parts
+        ):
+            return original(self, response)
+        logger.warning("[mem0] Gemini returned null content — returning empty string")
+        return ""
+
+    GeminiLLM._parse_response = _safe_parse_response
+    logger.info("Patched GeminiLLM._parse_response for null content guard")
+
+
 # Serializes enable_graph mutation + full Memory method execution.
 # Lock hold time is 2-20 seconds (see PRD §2.4).
 _graph_lock = threading.Lock()

@@ -1,4 +1,4 @@
-"""Tests for helpers.py — error wrapper, call_with_graph, bulk delete, user_id, sanitizer."""
+"""Tests for helpers.py — error wrapper, call_with_graph, bulk delete, user_id, sanitizer, Gemini patch."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from mem0_mcp_selfhosted.helpers import (
     _mem0_call,
     call_with_graph,
     get_default_user_id,
+    patch_gemini_parse_response,
     safe_bulk_delete,
 )
 
@@ -261,3 +262,77 @@ class TestEnhancedSanitizer:
         for case in test_cases:
             result = sanitize(case)
             assert pattern.match(result), f"'{case}' → '{result}' is not a valid Neo4j type"
+
+
+class TestPatchGeminiParseResponse:
+    """Tests for the Gemini null content guard monkey-patch."""
+
+    def test_null_content_returns_empty_string(self):
+        """When Gemini returns candidate with content=None, return empty string."""
+        # Create a mock GeminiLLM class with a _parse_response method
+        mock_module = MagicMock()
+        mock_gemini_cls = MagicMock()
+        original_parse = MagicMock(return_value="original result")
+        mock_gemini_cls._parse_response = original_parse
+
+        with patch.dict("sys.modules", {"mem0.llms.gemini": mock_module}):
+            mock_module.GeminiLLM = mock_gemini_cls
+
+            # Apply the patch
+            patch_gemini_parse_response()
+
+            # Verify the method was replaced
+            patched_method = mock_gemini_cls._parse_response
+            assert patched_method is not original_parse
+
+            # Test with null content
+            response = MagicMock()
+            candidate = MagicMock()
+            candidate.content = None
+            response.candidates = [candidate]
+
+            result = patched_method(MagicMock(), response)
+            assert result == ""
+
+    def test_normal_response_delegates_to_original(self):
+        """Normal responses with valid content delegate to original method."""
+        mock_module = MagicMock()
+        mock_gemini_cls = MagicMock()
+        original_parse = MagicMock(return_value="parsed content")
+        mock_gemini_cls._parse_response = original_parse
+
+        with patch.dict("sys.modules", {"mem0.llms.gemini": mock_module}):
+            mock_module.GeminiLLM = mock_gemini_cls
+
+            patch_gemini_parse_response()
+            patched_method = mock_gemini_cls._parse_response
+
+            # Test with valid content
+            response = MagicMock()
+            candidate = MagicMock()
+            candidate.content = MagicMock()
+            candidate.content.parts = [MagicMock()]
+            response.candidates = [candidate]
+
+            instance = MagicMock()
+            patched_method(instance, response)
+            original_parse.assert_called_once_with(instance, response)
+
+    def test_empty_candidates_returns_empty_string(self):
+        """Response with empty candidates list returns empty string."""
+        mock_module = MagicMock()
+        mock_gemini_cls = MagicMock()
+        original_parse = MagicMock(return_value="original")
+        mock_gemini_cls._parse_response = original_parse
+
+        with patch.dict("sys.modules", {"mem0.llms.gemini": mock_module}):
+            mock_module.GeminiLLM = mock_gemini_cls
+
+            patch_gemini_parse_response()
+            patched_method = mock_gemini_cls._parse_response
+
+            response = MagicMock()
+            response.candidates = []
+
+            result = patched_method(MagicMock(), response)
+            assert result == ""

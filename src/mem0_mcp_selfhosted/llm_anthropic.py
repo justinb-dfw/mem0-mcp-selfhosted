@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from typing import Any
 
 import anthropic
@@ -164,16 +165,22 @@ class AnthropicOATLLM(LLMBase):
 
         self.client = anthropic.Anthropic(**client_kwargs)
 
+    # Transient HTTP status codes that warrant automatic retry.
+    _RETRYABLE_STATUS_CODES = (500, 502, 503, 529)
+    _MAX_RETRIES = 2
+    _BACKOFF_SECONDS = (1, 2)
+
     def _call_api(self, params: dict) -> anthropic.types.Message:
-        """Call the Anthropic API with auth retry for OAT tokens.
+        """Call the Anthropic API with auth retry and transient-error retry.
 
         Wraps self.client.messages.create(**params) with:
-        - Truncation warning logging
+        - Retry-with-backoff for transient errors (500/502/503/529), max 2 retries
         - Auth retry: on AuthenticationError with OAT token, re-read credentials,
-          rebuild client if token changed, retry once
+          rebuild client if token changed, retry once (with transient retry on the retry)
+        - Truncation warning logging
         """
         try:
-            response = self.client.messages.create(**params)
+            response = self._call_with_transient_retry(params)
         except anthropic.AuthenticationError:
             if not is_oat_token(self._current_token):
                 raise
@@ -198,7 +205,7 @@ class AnthropicOATLLM(LLMBase):
                 "[mem0] OAT token expired, refreshed from credentials file and retrying"
             )
             self._build_client(new_token)
-            response = self.client.messages.create(**params)
+            response = self._call_with_transient_retry(params)
 
         if response.stop_reason == "max_tokens":
             logger.warning(
@@ -206,6 +213,25 @@ class AnthropicOATLLM(LLMBase):
             )
 
         return response
+
+    def _call_with_transient_retry(self, params: dict) -> anthropic.types.Message:
+        """Call the API with retry-with-backoff for transient server errors."""
+        last_exc: Exception | None = None
+        for attempt in range(1 + self._MAX_RETRIES):
+            try:
+                return self.client.messages.create(**params)
+            except anthropic.APIStatusError as exc:
+                if exc.status_code not in self._RETRYABLE_STATUS_CODES:
+                    raise
+                last_exc = exc
+                if attempt < self._MAX_RETRIES:
+                    delay = self._BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "[mem0] Anthropic %d error (attempt %d/%d), retrying in %ds",
+                        exc.status_code, attempt + 1, 1 + self._MAX_RETRIES, delay,
+                    )
+                    time.sleep(delay)
+        raise last_exc  # type: ignore[misc]
 
     def _supports_structured_output(self) -> bool:
         """Check if the configured model supports structured outputs."""

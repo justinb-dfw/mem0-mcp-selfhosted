@@ -23,6 +23,7 @@ from mem0_mcp_selfhosted.helpers import (
     call_with_graph,
     get_default_user_id,
     list_entities_facet,
+    patch_gemini_parse_response,
     patch_graph_sanitizer,
     safe_bulk_delete,
 )
@@ -87,6 +88,7 @@ def _init_memory() -> Any:
 
     # Patch mem0ai's relationship sanitizer before Memory init
     patch_graph_sanitizer()
+    patch_gemini_parse_response()
 
     # Initialize Memory
     from mem0 import Memory
