@@ -222,7 +222,7 @@ class TestBuildConfig:
                     patched_env.pop(k, None)
             with patch("mem0_mcp_selfhosted.config.resolve_token", return_value="sk-test"):
                 from mem0_mcp_selfhosted.config import build_config
-                with pytest.raises(ValueError, match="Unsupported LLM provider 'gemini'"):
+                with pytest.raises(ValueError, match="Unsupported MEM0_LLM_PROVIDER='gemini'"):
                     build_config()
 
     def test_anthropic_config_has_api_key_and_max_tokens(self):
@@ -529,7 +529,7 @@ class TestBuildConfig:
         assert config_dict["embedder"]["provider"] == "ollama"
 
     def test_invalid_mem0_provider_raises_valueerror(self):
-        """Invalid MEM0_PROVIDER raises ValueError when MEM0_LLM_PROVIDER not set."""
+        """Invalid MEM0_PROVIDER raises ValueError even when MEM0_LLM_PROVIDER overrides."""
         leak_keys = [k for k in os.environ if k.startswith("MEM0_")]
         env = {"MEM0_PROVIDER": "unsupported"}
         with patch.dict("os.environ", env, clear=False) as patched_env:
@@ -538,8 +538,28 @@ class TestBuildConfig:
                     patched_env.pop(k, None)
             with patch("mem0_mcp_selfhosted.config.resolve_token", return_value="sk-test"):
                 from mem0_mcp_selfhosted.config import build_config
-                with pytest.raises(ValueError, match="Unsupported LLM provider"):
+                with pytest.raises(ValueError, match="Unsupported MEM0_PROVIDER"):
                     build_config()
+
+    def test_invalid_mem0_provider_fails_fast_with_llm_override(self):
+        """Invalid MEM0_PROVIDER raises ValueError even when MEM0_LLM_PROVIDER is valid."""
+        leak_keys = [k for k in os.environ if k.startswith("MEM0_")]
+        env = {"MEM0_PROVIDER": "foobar", "MEM0_LLM_PROVIDER": "anthropic"}
+        with patch.dict("os.environ", env, clear=False) as patched_env:
+            for k in leak_keys:
+                if k not in env:
+                    patched_env.pop(k, None)
+            with patch("mem0_mcp_selfhosted.config.resolve_token", return_value="sk-test"):
+                from mem0_mcp_selfhosted.config import build_config
+                with pytest.raises(ValueError, match="Unsupported MEM0_PROVIDER='foobar'"):
+                    build_config()
+
+    def test_mem0_provider_ollama_excludes_anthropic_registration(self):
+        """MEM0_PROVIDER=ollama excludes Anthropic from providers_info (no graph)."""
+        env = {"MEM0_PROVIDER": "ollama"}
+        _, providers_info, _ = self._build_with_env(env)
+        provider_names = [pi["name"] for pi in providers_info]
+        assert "anthropic" not in provider_names
 
     # --- MEM0_OLLAMA_URL cascade (13.x) ---
 

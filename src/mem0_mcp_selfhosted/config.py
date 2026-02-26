@@ -30,10 +30,10 @@ def _resolve_ollama_url(*env_keys: str) -> str:
     ``MEM0_OLLAMA_URL``, then ``"http://localhost:11434"``.
     """
     for key in env_keys:
-        val = os.environ.get(key)
+        val = os.environ.get(key, "").strip()
         if val:
             return val
-    return os.environ.get("MEM0_OLLAMA_URL", "http://localhost:11434")
+    return os.environ.get("MEM0_OLLAMA_URL", "").strip() or "http://localhost:11434"
 
 
 def build_config() -> tuple[dict[str, Any], list[ProviderInfo], dict[str, Any] | None]:
@@ -48,14 +48,18 @@ def build_config() -> tuple[dict[str, Any], list[ProviderInfo], dict[str, Any] |
 
     # --- Top-level provider default (cascades to LLM and graph LLM) ---
     _provider_default = os.environ.get("MEM0_PROVIDER", "anthropic")
+    _supported_llm_providers = ("anthropic", "ollama")
+    if _provider_default not in _supported_llm_providers:
+        raise ValueError(
+            f"Unsupported MEM0_PROVIDER={_provider_default!r}. "
+            f"Supported: {list(_supported_llm_providers)}"
+        )
 
     # --- LLM ---
     llm_provider = os.environ.get("MEM0_LLM_PROVIDER", _provider_default)
-    _supported_llm_providers = ("anthropic", "ollama")
     if llm_provider not in _supported_llm_providers:
         raise ValueError(
-            f"Unsupported LLM provider {llm_provider!r} "
-            f"(from MEM0_LLM_PROVIDER or MEM0_PROVIDER). "
+            f"Unsupported MEM0_LLM_PROVIDER={llm_provider!r}. "
             f"Supported: {list(_supported_llm_providers)}"
         )
 
