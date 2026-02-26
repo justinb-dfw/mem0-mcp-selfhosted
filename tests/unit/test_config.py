@@ -676,6 +676,12 @@ class TestBuildConfig:
         config_dict, *_ = self._build_with_env(env)
         assert config_dict["llm"]["config"]["max_tokens"] == 8192
 
+    def test_optional_env_whitespace_stripped(self):
+        """Whitespace in optional env vars (e.g. MEM0_QDRANT_API_KEY) is stripped."""
+        env = {"MEM0_QDRANT_API_KEY": "  my-secret-key \n"}
+        config_dict, *_ = self._build_with_env(env)
+        assert config_dict["vector_store"]["config"]["api_key"] == "my-secret-key"
+
     # --- End-to-end cascade (14.x) ---
 
     def test_two_env_vars_configure_full_ollama_stack(self):

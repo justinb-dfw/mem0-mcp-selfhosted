@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 from typing import Annotated, Any
 
@@ -17,6 +16,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from mem0_mcp_selfhosted.config import ProviderInfo, build_config
+from mem0_mcp_selfhosted.env import bool_env, env
 from mem0_mcp_selfhosted.graph_tools import get_entity, search_graph
 from mem0_mcp_selfhosted.helpers import (
     _mem0_call,
@@ -102,9 +102,7 @@ def _init_memory() -> Any:
         router_config = SplitModelGraphLLMConfig(**split_config)
         memory.graph.llm = SplitModelGraphLLM(router_config)
 
-    _enable_graph_default = bool(
-        os.environ.get("MEM0_ENABLE_GRAPH", "false").lower() in ("true", "1", "yes")
-    )
+    _enable_graph_default = bool_env("MEM0_ENABLE_GRAPH")
     return memory
 
 
@@ -112,8 +110,8 @@ def _create_server() -> FastMCP:
     """Create and configure the FastMCP server with all tools and prompts."""
     global mcp
 
-    host = os.environ.get("MEM0_HOST", "0.0.0.0")
-    port = int(os.environ.get("MEM0_PORT", "8081"))
+    host = env("MEM0_HOST", "0.0.0.0")
+    port = int(env("MEM0_PORT", "8081"))
 
     mcp = FastMCP(
         "mem0",
@@ -396,7 +394,7 @@ def _register_prompts(mcp: FastMCP) -> None:
 def run_server() -> None:
     """Entry point: initialize Memory, create server, and run."""
     # Configure logging
-    log_level = os.environ.get("MEM0_LOG_LEVEL", "INFO").upper()
+    log_level = env("MEM0_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
         level=getattr(logging, log_level, logging.INFO),
         format="%(levelname)s %(name)s | %(message)s",
@@ -416,7 +414,7 @@ def run_server() -> None:
 
     # Create and run server
     server = _create_server()
-    transport = os.environ.get("MEM0_TRANSPORT", "stdio").lower()
+    transport = env("MEM0_TRANSPORT", "stdio").lower()
 
     if transport == "sse":
         server.run(transport="sse")

@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Dict, List
+
+from mem0_mcp_selfhosted.env import env
 
 from mem0.llms.ollama import OllamaLLM
 
@@ -156,7 +157,7 @@ class OllamaToolLLM(OllamaLLM):
         has_tools = bool(tools)
 
         # Layer 1: /no_think injection
-        think_enabled = os.environ.get("MEM0_OLLAMA_THINK", "").lower() in (
+        think_enabled = env("MEM0_OLLAMA_THINK").lower() in (
             "true", "1", "yes",
         )
         if not think_enabled:
@@ -194,7 +195,7 @@ class OllamaToolLLM(OllamaLLM):
         params["options"] = options
 
         # Layer 3: keep_alive
-        keep_alive = os.environ.get("MEM0_OLLAMA_KEEP_ALIVE", "30m")
+        keep_alive = env("MEM0_OLLAMA_KEEP_ALIVE", "30m")
         params["keep_alive"] = keep_alive
 
         # Pass tools to Ollama (restored from upstream PR #3241)

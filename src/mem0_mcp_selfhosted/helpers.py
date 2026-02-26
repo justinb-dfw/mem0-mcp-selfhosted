@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import threading
 from typing import Any, Callable
+
+from mem0_mcp_selfhosted.env import env
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ _graph_lock = threading.Lock()
 
 def get_default_user_id() -> str:
     """Get the default user_id from MEM0_USER_ID env var."""
-    return os.environ.get("MEM0_USER_ID", "user")
+    return env("MEM0_USER_ID", "user")
 
 
 def _mem0_call(func: Callable, *args: Any, **kwargs: Any) -> str:

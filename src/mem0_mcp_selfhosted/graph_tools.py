@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
+
+from mem0_mcp_selfhosted.env import env, opt_env
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,10 @@ def _get_driver():
     except ImportError:
         return None
 
-    url = os.environ.get("MEM0_NEO4J_URL", "bolt://127.0.0.1:7687")
-    user = os.environ.get("MEM0_NEO4J_USER", "neo4j")
-    password = os.environ.get("MEM0_NEO4J_PASSWORD", "mem0graph")
-    database = os.environ.get("MEM0_NEO4J_DATABASE")
+    url = env("MEM0_NEO4J_URL", "bolt://127.0.0.1:7687")
+    user = env("MEM0_NEO4J_USER", "neo4j")
+    password = env("MEM0_NEO4J_PASSWORD", "mem0graph")
+    database = opt_env("MEM0_NEO4J_DATABASE")
 
     try:
         _driver = GraphDatabase.driver(url, auth=(user, password))
@@ -49,7 +50,7 @@ def _run_query(query: str, params: dict[str, Any] | None = None) -> list[dict]:
     if driver is None:
         raise RuntimeError("Neo4j driver not available. Check Neo4j connection settings.")
 
-    database = os.environ.get("MEM0_NEO4J_DATABASE")
+    database = opt_env("MEM0_NEO4J_DATABASE")
     with driver.session(database=database) if database else driver.session() as session:
         result = session.run(query, params or {})
         return [record.data() for record in result]

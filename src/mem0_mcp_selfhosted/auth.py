@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
+
+from mem0_mcp_selfhosted.env import opt_env
 from pathlib import Path
 
 import httpx
@@ -69,7 +70,7 @@ def resolve_token() -> str | None:
     Returns the resolved token or None if no auth is available.
     """
     # Priority 1: Explicit env var
-    token = os.environ.get("MEM0_ANTHROPIC_TOKEN")
+    token = opt_env("MEM0_ANTHROPIC_TOKEN")
     if token:
         token_type = "OAT" if is_oat_token(token) else "API key"
         logger.debug("Auth resolved from MEM0_ANTHROPIC_TOKEN (type: %s)", token_type)
@@ -85,7 +86,7 @@ def resolve_token() -> str | None:
         return token
 
     # Priority 3: Standard API key
-    token = os.environ.get("ANTHROPIC_API_KEY")
+    token = opt_env("ANTHROPIC_API_KEY")
     if token:
         token_type = "OAT" if is_oat_token(token) else "API key"
         logger.debug("Auth resolved from ANTHROPIC_API_KEY (type: %s)", token_type)

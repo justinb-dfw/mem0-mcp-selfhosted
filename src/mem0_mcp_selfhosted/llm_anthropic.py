@@ -10,9 +10,10 @@ the built-in provider to fix tool-call parsing and add OAT support.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
+
+from mem0_mcp_selfhosted.env import env
 from typing import Any
 
 import anthropic
@@ -152,7 +153,7 @@ class AnthropicOATLLM(LLMBase):
         self._refresh_token: str | None = None
         self._expires_at: int | None = None
         self._refresh_threshold: int = int(
-            os.environ.get("MEM0_OAT_REFRESH_THRESHOLD_SECONDS", "1800")
+            env("MEM0_OAT_REFRESH_THRESHOLD_SECONDS", "1800")
         )
 
         if token and is_oat_token(token):
@@ -176,7 +177,7 @@ class AnthropicOATLLM(LLMBase):
         if token and is_oat_token(token):
             client_kwargs["auth_token"] = token
             # Inject OAT identity headers unless disabled
-            oat_headers_mode = os.environ.get("MEM0_OAT_HEADERS", "auto").lower()
+            oat_headers_mode = env("MEM0_OAT_HEADERS", "auto").lower()
             if oat_headers_mode != "none":
                 client_kwargs["default_headers"] = OAT_HEADERS
         elif token:
