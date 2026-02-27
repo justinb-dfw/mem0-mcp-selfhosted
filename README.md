@@ -11,12 +11,13 @@ You need these services running:
 | Service | Required | Purpose |
 |---------|----------|---------|
 | **Qdrant** | Yes | Vector memory storage and search |
-| **Ollama** | Yes | Embedding generation (bge-m3 or similar) |
+| **Ollama** | Yes | Embedding generation (`bge-m3`) and optionally local LLM |
 | **Neo4j 5+** | Optional | Knowledge graph (entity relationships) |
-| **Anthropic API** | Conditional | LLM for fact extraction and memory updates. Required when `MEM0_LLM_PROVIDER=anthropic` (default). Not needed for fully local Ollama setups. Auto-authenticates via Claude Code's OAT token. |
-| **Google API** | Optional | Graph LLM for entity extraction (`gemini`/`gemini_split` providers) |
+| **Google API Key** | Optional | Required only for `gemini`/`gemini_split` graph providers |
 
 Python >= 3.10.
+
+> **Authentication:** The default setup uses Claude (Anthropic) as the LLM for fact extraction. No API key needed — the server automatically uses your Claude Code session token. For fully local setups, set `MEM0_PROVIDER=ollama`. See [Authentication](#authentication) for advanced options.
 
 ## Quick Start
 
