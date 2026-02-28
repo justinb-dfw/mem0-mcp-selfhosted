@@ -89,6 +89,47 @@ Add these rules to your project's `CLAUDE.md` (or `~/.claude/CLAUDE.md` for glob
 
 This gives Claude Code persistent memory across sessions. Instead of re-exploring the codebase every time, it retrieves what it already knows and starts productive work immediately.
 
+## Claude Code Hooks
+
+Session hooks give Claude Code **automatic** cross-session memory — no CLAUDE.md rules needed. Memories are injected at session start and saved at session end, without any manual tool calls.
+
+| Hook | Event | What it does |
+|------|-------|--------------|
+| `mem0-hook-context` | SessionStart (`startup`, `compact`) | Searches mem0 for project-relevant memories and injects them as `additionalContext` |
+| `mem0-hook-stop` | Stop | Reads the last ~3 user/assistant exchanges from the transcript and saves a summary to mem0 via `infer=True` |
+
+Both hooks are non-fatal — if mem0 is unreachable or any error occurs, Claude Code continues normally.
+
+### Install
+
+Install hooks into your project:
+
+```bash
+mem0-install-hooks
+```
+
+Or install globally (all projects):
+
+```bash
+mem0-install-hooks --global
+```
+
+This adds the hook entries to `.claude/settings.json`. The installer is idempotent — running it twice won't create duplicates.
+
+### How it works
+
+**On session start**, the context hook searches mem0 with two queries (project architecture + recent session summaries), deduplicates by memory ID, and formats the results as numbered lines under a `# mem0 Cross-Session Memory` header. These are injected via the hook's `additionalContext` response field.
+
+**On session stop**, the stop hook reads the JSONL transcript, extracts the last 6 user/assistant messages (a sliding window via bounded deque), builds a summary prompt, and calls `memory.add(infer=True)` to extract atomic facts. Graph is force-disabled in hooks to stay within the 15s/30s timeout budgets.
+
+### Entry points
+
+| Command | Function | Registered in `pyproject.toml` |
+|---------|----------|-------------------------------|
+| `mem0-hook-context` | `hooks:context_main` | SessionStart hook |
+| `mem0-hook-stop` | `hooks:stop_main` | Stop hook |
+| `mem0-install-hooks` | `hooks:install_main` | CLI installer |
+
 ## Authentication
 
 The server resolves an Anthropic token using a prioritized fallback chain:
@@ -221,28 +262,35 @@ All configuration is via environment variables. Create a `.env` file or set them
 ```
 Claude Code
   |
-  └── MCP stdio/SSE/streamable-http
+  ├── MCP stdio/SSE/streamable-http
+  │     |
+  │     ├── env.py               ← Centralized env var readers (whitespace-safe)
+  │     ├── auth.py              ← Hybrid token fallback chain + OAT self-refresh
+  │     ├── llm_anthropic.py     ← Custom Anthropic LLM provider (OAT + structured outputs)
+  │     ├── llm_ollama.py        ← Custom Ollama LLM provider (restored tool-calling)
+  │     ├── config.py            ← Env vars → MemoryConfig dict (provider + URL cascades)
+  │     ├── helpers.py           ← Error wrapper, concurrency lock, safe bulk-delete, monkey-patches
+  │     ├── graph_tools.py       ← Direct Neo4j Cypher queries (lazy driver)
+  │     ├── llm_router.py        ← Split-model graph LLM router (gemini_split)
+  │     ├── __init__.py          ← Telemetry suppression (before any mem0 import)
+  │     └── server.py            ← FastMCP orchestrator (11 tools + prompt)
+  │           |
+  │           ├── mem0ai Memory class
+  │           │     ├── Vector: LLM fact extraction → Ollama embed → Qdrant
+  │           │     └── Graph: LLM entity extraction (tool calls) → Neo4j
+  │           |
+  │           └── Infrastructure
+  │                 ├── Qdrant          ← Vector store
+  │                 ├── Ollama          ← Embeddings
+  │                 ├── Neo4j           ← Knowledge graph (optional)
+  │                 └── Anthropic/Ollama ← Main LLM (configurable)
+  |
+  └── Session Hooks (subprocess, not MCP)
         |
-        ├── env.py               ← Centralized env var readers (whitespace-safe)
-        ├── auth.py              ← Hybrid token fallback chain + OAT self-refresh
-        ├── llm_anthropic.py     ← Custom Anthropic LLM provider (OAT + structured outputs)
-        ├── llm_ollama.py        ← Custom Ollama LLM provider (restored tool-calling)
-        ├── config.py            ← Env vars → MemoryConfig dict (provider + URL cascades)
-        ├── helpers.py           ← Error wrapper, concurrency lock, safe bulk-delete, monkey-patches
-        ├── graph_tools.py       ← Direct Neo4j Cypher queries (lazy driver)
-        ├── llm_router.py        ← Split-model graph LLM router (gemini_split)
-        ├── __init__.py          ← Telemetry suppression (before any mem0 import)
-        └── server.py            ← FastMCP orchestrator (11 tools + prompt)
-              |
-              ├── mem0ai Memory class
-              │     ├── Vector: LLM fact extraction → Ollama embed → Qdrant
-              │     └── Graph: LLM entity extraction (tool calls) → Neo4j
-              |
-              └── Infrastructure
-                    ├── Qdrant          ← Vector store
-                    ├── Ollama          ← Embeddings
-                    ├── Neo4j           ← Knowledge graph (optional)
-                    └── Anthropic/Ollama ← Main LLM (configurable)
+        └── hooks.py             ← Cross-session memory (SessionStart + Stop hooks)
+              ├── context_main()   → Injects memories as additionalContext on startup/compact
+              ├── stop_main()      → Saves session summary to mem0 on exit
+              └── install_main()   → CLI to patch .claude/settings.json
 ```
 
 ## Graph Memory & Quota
@@ -317,9 +365,9 @@ python3 -m pytest tests/ -v
 
 ### Test Structure
 
-- **`tests/unit/`** -- Pure unit tests with mocked dependencies (env, auth, config, config matrix, concurrency, MCP protocol, helpers, LLM providers, graph tools, LLM router, server)
+- **`tests/unit/`** -- Pure unit tests with mocked dependencies (env, auth, config, config matrix, concurrency, MCP protocol, helpers, hooks, LLM providers, graph tools, LLM router, server)
 - **`tests/contract/`** -- Validates assumptions about mem0ai internals (schema detection invariant, `vector_store.client` access path, `LlmFactory` registration idempotency)
-- **`tests/integration/`** -- Live infrastructure tests (memory lifecycle, graph ops, bulk operations) against real Qdrant + Neo4j + Ollama. Marked with `@pytest.mark.integration`.
+- **`tests/integration/`** -- Live infrastructure tests (memory lifecycle, graph ops, bulk operations, hooks) against real Qdrant + Neo4j + Ollama. Marked with `@pytest.mark.integration`.
 
 Contract tests catch breaking changes in `mem0ai` upgrades before they reach production.
 
