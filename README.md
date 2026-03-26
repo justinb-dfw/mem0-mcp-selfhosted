@@ -1,10 +1,34 @@
-# mem0-mcp-selfhosted
+# mem0-mcp-selfhosted (justinb-dfw fork)
 
-<a href="https://glama.ai/mcp/servers/elvismdev/mem0-mcp-selfhosted"><img width="380" height="200" src="https://glama.ai/mcp/servers/elvismdev/mem0-mcp-selfhosted/badge?v=1" alt="mem0-mcp-selfhosted MCP server" /></a>
+> **Fork of [elvismdev/mem0-mcp-selfhosted](https://github.com/elvismdev/mem0-mcp-selfhosted)** — many thanks to [@elvismdev](https://github.com/elvismdev) for the original implementation.
 
-Self-hosted [mem0](https://github.com/mem0ai/mem0) MCP server for Claude Code. Run a complete memory server against self-hosted Qdrant + Neo4j + Ollama, with your choice of Anthropic (Claude) or Ollama as the main LLM.
+Self-hosted [mem0](https://github.com/mem0ai/mem0) MCP server for Claude Code. Run a complete memory server against self-hosted Qdrant + Ollama, with your choice of Anthropic (Claude) or Ollama as the main LLM.
 
 Uses the `mem0ai` package directly as a library, supports both Claude's OAT token and fully local Ollama setups, and exposes 11 MCP tools for full memory management.
+
+## Changes in this fork
+
+### Removed Neo4j / graph dependencies
+
+The upstream package installs `mem0ai[graph]` which pulls in `apache-age-python` → `psycopg2`, requiring PostgreSQL development headers (`pg_config`) to build from source. On macOS this causes install failures unless you separately install PostgreSQL dev tools.
+
+This fork changes the dependency to `mem0ai[llms]` (vector store only) and removes the `neo4j` driver. If you need graph support, use the upstream repo directly.
+
+**Embedding model:** This fork is configured with `nomic-embed-text` (Nomic AI, US-based, 768 dims) instead of the upstream default `bge-m3` (BAAI, China). Both work — change `MEM0_EMBED_MODEL` and `MEM0_EMBED_DIMS` to swap.
+
+### Secret / credential sanitization
+
+All `add_memory` and `update_memory` calls pass content through a sanitizer before it reaches Qdrant. Detected patterns are replaced with labeled placeholders like `[REDACTED:github-token]` rather than being silently dropped, so it's obvious when redaction occurred.
+
+Patterns covered:
+- Anthropic, OpenAI, Slack, Stripe API keys
+- GitHub personal access / OAuth tokens
+- AWS access key IDs
+- JWT tokens
+- PEM private key / certificate blocks
+- Inline `password=`, `secret=`, `api_key=`, `token=` assignments
+- Database connection strings with embedded credentials
+- Generic `Bearer <token>` Authorization headers
 
 ## Prerequisites
 

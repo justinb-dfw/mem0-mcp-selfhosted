@@ -21,6 +21,7 @@ from pydantic import Field
 from mem0_mcp_selfhosted.config import ProviderInfo, build_config
 from mem0_mcp_selfhosted.env import bool_env, env
 from mem0_mcp_selfhosted.graph_tools import get_entity, search_graph
+from mem0_mcp_selfhosted.sanitize import sanitize_messages, sanitize_text
 from mem0_mcp_selfhosted.helpers import (
     _mem0_call,
     call_with_graph,
@@ -197,11 +198,11 @@ def _register_tools(mcp: FastMCP) -> None:
         """Store a new memory. Requires at least one of user_id, agent_id, or run_id."""
         uid = user_id or get_default_user_id()
 
-        # Build messages for mem0ai
+        # Sanitize before storing — strip secrets/credentials from content
         if messages:
-            msgs = messages
+            msgs = sanitize_messages(messages)
         else:
-            msgs = [{"role": "user", "content": text}]
+            msgs = [{"role": "user", "content": sanitize_text(text)}]
 
         kwargs: dict[str, Any] = {"user_id": uid}
         if agent_id:
@@ -299,8 +300,10 @@ def _register_tools(mcp: FastMCP) -> None:
         if mem is None:
             return json.dumps({"error": "Memory not initialized", "detail": "Infrastructure may be unavailable."}, ensure_ascii=False)
 
+        clean_text = sanitize_text(text)
+
         def _do_update():
-            mem.update(memory_id, data=text)
+            mem.update(memory_id, data=clean_text)
             return {"message": "Memory updated successfully!"}
 
         return _mem0_call(_do_update)
