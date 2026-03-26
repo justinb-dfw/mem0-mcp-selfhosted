@@ -16,6 +16,25 @@ This fork changes the dependency to `mem0ai[llms]` (vector store only) and remov
 
 **Embedding model:** This fork is configured with `nomic-embed-text` (Nomic AI, US-based, 768 dims) instead of the upstream default `bge-m3` (BAAI, China). Both work — change `MEM0_EMBED_MODEL` and `MEM0_EMBED_DIMS` to swap.
 
+### Author and team provenance tagging
+
+Every `add_memory` call automatically stamps metadata with the author and optional team, making it easy to track who added what in a shared Qdrant instance.
+
+Set these env vars in your MCP config:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `MEM0_AUTHOR_ID` | Who added the memory. Falls back to `MEM0_USER_ID` if unset. | `justinb` |
+| `MEM0_TEAM_ID` | Optional team/group tag. | `infosec` |
+
+Each stored memory will include `{"user": "justinb", "team": "infosec"}` in its Qdrant metadata. You can filter search results by author using the `filters` parameter on `search_memories`:
+
+```json
+{"user": {"eq": "justinb"}}
+```
+
+For team setups, all members share a common `MEM0_USER_ID` scope for retrieval but each set their own `MEM0_AUTHOR_ID` — so memories are pooled but attributable.
+
 ### Secret / credential sanitization
 
 All `add_memory` and `update_memory` calls pass content through a sanitizer before it reaches Qdrant. Detected patterns are replaced with labeled placeholders like `[REDACTED:github-token]` rather than being silently dropped, so it's obvious when redaction occurred.
